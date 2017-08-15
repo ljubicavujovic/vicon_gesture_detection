@@ -136,6 +136,9 @@ add_executable(multiple_topics_listener src/multiple_topics_listener.cpp)
 target_link_libraries(multiple_topics_listener ${catkin_LIBRARIES} ${FCL_LIBRARIES})
 add_dependencies(multiple_topics_listener vicon_communication_generate_messages_cpp)
 
+add_executable(subscriber_and_publisher src/subscriber_and_publisher.cpp)
+target_link_libraries(subscriber_and_publisher ${catkin_LIBRARIES} ${FCL_LIBRARIES})
+add_dependencies(subscriber_and_publisher vicon_communication_generate_messages_cpp)
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}

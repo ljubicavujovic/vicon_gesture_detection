@@ -62,7 +62,7 @@ vector<Contact> getPointingObject(const TransformStampedConstPtr& cube,
 
   return contacts;
 }
-void chatterCallback(const TransformStampedConstPtr& cube_1,
+void callback(const TransformStampedConstPtr& cube_1,
                      const TransformStampedConstPtr& cube_2,
                      const TransformStampedConstPtr& cube_3,
                      const TransformStampedConstPtr& table,
@@ -71,8 +71,9 @@ void chatterCallback(const TransformStampedConstPtr& cube_1,
   vector<Contact> contacts_1 = getPointingObject(cube_1, wand);
   vector<Contact> contacts_2 = getPointingObject(cube_2, wand);
   vector<Contact> contacts_3 = getPointingObject(cube_3, wand);
-  
+  string solution = "";
   if (!contacts_1.empty()){
+    solution = "Wand is pointing to Cube 1";
     std::cout << "Wand is pointing to Cube 1" << '\n';
     cout << contacts_1.size() << " contacts found" << endl;
     for(const Contact &contact : contacts_1) {
@@ -80,6 +81,7 @@ void chatterCallback(const TransformStampedConstPtr& cube_1,
     }
   }
   if (!contacts_2.empty()){
+    solution = "Wand is pointing to Cube 2";
     std::cout << "Wand is pointing to Cube 2" << '\n';
     cout << contacts_2.size() << " contacts found" << endl;
     for(const Contact &contact : contacts_2) {
@@ -87,6 +89,7 @@ void chatterCallback(const TransformStampedConstPtr& cube_1,
     }
   }
   if (!contacts_3.empty()){
+    solution = "Wand is pointing to Cube 3";
     std::cout << "Wand is pointing to Cube 3" << '\n';
     cout << contacts_3.size() << " contacts found" << endl;
     for(const Contact &contact : contacts_3) {
@@ -96,6 +99,7 @@ void chatterCallback(const TransformStampedConstPtr& cube_1,
   cout << '\n';
   cout << '\n';
   cout << '\n';
+
 }
 
 int main(int argc, char **argv){
@@ -112,7 +116,7 @@ int main(int argc, char **argv){
 
   typedef sync_policies::ApproximateTime<TransformStamped, TransformStamped, TransformStamped, TransformStamped, TransformStamped> MySyncPolicy;
   Synchronizer<MySyncPolicy> sync(MySyncPolicy(10), cube_subscriber_1, cube_subscriber_2, cube_subscriber_3, table_subscriber, wand_subscriber);
-  sync.registerCallback(boost::bind(&chatterCallback, _1, _2, _3, _4, _5));
+  sync.registerCallback(boost::bind(&callback, _1, _2, _3, _4, _5));
 
   ros::spin();
 
