@@ -1,26 +1,25 @@
 #include <ros/ros.h>
+#include <iostream>
 #include <std_msgs/String.h>
 #include <std_msgs/Float64MultiArray.h>
 #include <std_msgs/MultiArrayLayout.h>
-#include <typeinfo>
-#include <sstream>
 #include <geometry_msgs/TransformStamped.h>
 #include <message_filters/subscriber.h>
 #include <message_filters/synchronizer.h>
 #include <message_filters/sync_policies/approximate_time.h>
-
-#include <fcl/shape/geometric_shapes.h>
-#include "fcl/BVH/BV_fitter.h"
-#include <fcl/shape/geometric_shapes_utility.h>
-#include <fcl/narrowphase/narrowphase.h>
-#include <iostream>
 #include <fcl/collision.h>
-#include<fcl/math/transform.h>
+#include <fcl/narrowphase/narrowphase.h>
 
 using namespace std;
 using namespace fcl;
-using namespace message_filters;
+using namespace std_msgs;
 using namespace geometry_msgs;
+using namespace message_filters;
+
+const int NUMBER_OF_OBJECTS = 5;
+const int NUMBER_OF_LAYERS = 2;
+const int NUMBER_OF_DIM = 3;
+const string NAME_OF_OBJECTS[] = {"Cube1", "Cube2", "Plate", "Banana", "Coffee"};
 
 typedef message_filters::sync_policies::ApproximateTime<TransformStamped,
                                                         TransformStamped,
@@ -32,22 +31,26 @@ typedef message_filters::sync_policies::ApproximateTime<TransformStamped,
                                                         MySyncPolicy;
 typedef message_filters::Subscriber<TransformStamped> TransformStampedType;
 
+struct Message{
+   Float64MultiArray coordinates;
+   String alexa;
+};
+
 class SubscribeAndPublish{
 
 public:
   SubscribeAndPublish(){
     publisher_alexa = n.advertise<std_msgs::String>("/alexa_out", 1);
     coordinates_publisher = n.advertise<std_msgs::Float64MultiArray> ("/coordinates", 5);
-    cube_subscriber_1 = new TransformStampedType(n, "vicon/Cube1/Cube1", 10);
-    cube_subscriber_2 = new TransformStampedType(n, "vicon/Cube2/Cube2", 10);
-    plate_subscriber = new TransformStampedType(n, "vicon/Plate/Plate", 10);
-    banana_subscriber = new TransformStampedType(n, "vicon/Banana/Banana", 10);
-    coffee_subscriber = new TransformStampedType(n, "vicon/Coffee/Coffee", 10);
-    table_subscriber = new TransformStampedType(n, "vicon/Table/Table", 10);
-    wand_subscriber = new TransformStampedType(n, "vicon/Wand/Wand", 10);
+    cube_subscriber_1 = new TransformStampedType(n, "vicon/Cube1/Cube1", 5);
+    cube_subscriber_2 = new TransformStampedType(n, "vicon/Cube2/Cube2", 5);
+    plate_subscriber = new TransformStampedType(n, "vicon/Plate/Plate", 5);
+    banana_subscriber = new TransformStampedType(n, "vicon/Banana/Banana", 5);
+    coffee_subscriber = new TransformStampedType(n, "vicon/Coffee/Coffee", 5);
+    table_subscriber = new TransformStampedType(n, "vicon/Table/Table", 5);
+    wand_subscriber = new TransformStampedType(n, "vicon/Wand/Wand", 5);
 
-
-    sync = new message_filters::Synchronizer<MySyncPolicy>(MySyncPolicy(10),
+    sync = new message_filters::Synchronizer<MySyncPolicy>(MySyncPolicy(5),
                                                           *cube_subscriber_1,
                                                           *cube_subscriber_2,
                                                           *plate_subscriber,
@@ -67,145 +70,86 @@ public:
                 const TransformStampedConstPtr& table,
                 const TransformStampedConstPtr& wand){
 
-    vector<Contact> contacts_1 = getPointingObject(cube_1, wand);
-    vector<Contact> contacts_2 = getPointingObject(cube_2, wand);
-    vector<Contact> contacts_3 = getPointingObject(plate, wand);
-    vector<Contact> contacts_4 = getPointingObject(banana, wand);
-    vector<Contact> contacts_5 = getPointingObject(coffee, wand);
+    vector<TransformStampedConstPtr> objects;
+    objects.push_back(cube_1);
+    objects.push_back(cube_2);
+    objects.push_back(plate);
+    objects.push_back(banana);
+    objects.push_back(coffee);
+    objects.push_back(wand);
 
-    string solution = "";
-    std_msgs::Float64MultiArray coordinates;
-    coordinates.layout.dim.push_back(std_msgs::MultiArrayDimension());
-    coordinates.layout.dim.push_back(std_msgs::MultiArrayDimension());
-    coordinates.layout.dim.push_back(std_msgs::MultiArrayDimension());
-
-    coordinates.layout.dim[0].size = 2;
-    coordinates.layout.dim[0].stride = 2*5*3;
-    coordinates.layout.dim[0].label = "index";
-
-    coordinates.layout.dim[1].size = 5;
-    coordinates.layout.dim[1].stride = 5*3;
-    coordinates.layout.dim[1].label = "layer";
-
-    coordinates.layout.dim[2].size = 3;
-    coordinates.layout.dim[2].stride = 3;
-    coordinates.layout.dim[2].label = "xyz";
-
-    coordinates.data.clear();
-
-
-    std_msgs::String msg;
-    if (!contacts_1.empty()){
-      solution = "Wand is pointing to Cube 1";
-
-      cout << "Wand is pointing to Cube 1" << endl;
-      cout << contacts_1.size() << " contacts found" << endl;
-      for(const Contact &contact : contacts_1) {
-        cout << "position: " << contact.pos << endl;
-        Vec3f diff = get_difference(contact.pos, cube_1);
-        for (int i=0; i < 3; i++)
-        coordinates.data.insert(coordinates.data.end(), diff[i]);
-      }
-    }
-    else{
-      for (int i=0; i < 3; i++)
-      coordinates.data.insert(coordinates.data.end(), 10);
-    }
-
-    if (!contacts_2.empty()){
-      solution = "Wand is pointing to Cube 2";
-      cout << "Wand is pointing to Cube 2" << endl;
-      cout << contacts_2.size() << " contacts found" << endl;
-      for(const Contact &contact : contacts_2) {
-      cout << "position: " << contact.pos << endl;
-      Vec3f diff = get_difference(contact.pos, cube_2);
-      for (int i=0; i < 3; i++)
-      coordinates.data.insert(coordinates.data.end(), diff[i]);
-      }
-    }
-    else{
-      for (int i=0; i < 3; i++)
-      coordinates.data.insert(coordinates.data.end(), 10);
-    }
-    if (!contacts_3.empty()){
-      solution = "Wand is pointing to Plate";
-      cout << "Wand is pointing to Plate" << endl;
-      cout << contacts_3.size() << " contacts found" << endl;
-      for(const Contact &contact : contacts_3) {
-      cout << "position: " << contact.pos << endl;
-      Vec3f diff = get_difference(contact.pos, plate);
-      for (int i=0; i < 3; i++)
-      coordinates.data.insert(coordinates.data.end(), diff[i]);
-      }
-    }
-    else{
-      for (int i=0; i < 3; i++)
-      coordinates.data.insert(coordinates.data.end(), 10);
-    }
-    if (!contacts_4.empty()){
-      solution = "Wand is pointing to Banana";
-      cout << "Wand is pointing to Banana" << endl;
-      cout << contacts_4.size() << " contacts found" << endl;
-      for(const Contact &contact : contacts_4) {
-      cout << "position: " << contact.pos << endl;
-      Vec3f diff = get_difference(contact.pos, banana);
-      for (int i=0; i < 3; i++)
-      coordinates.data.insert(coordinates.data.end(), diff[i]);
-      }
-    }
-    else{
-      for (int i=0; i < 3; i++)
-      coordinates.data.insert(coordinates.data.end(), 10);
-    }
-    if (!contacts_5.empty()){
-      solution = "Wand is pointing to Coffee";
-      cout << "Wand is pointing to Coffee" << endl;
-      cout << contacts_5.size() << " contacts found" << endl;
-      for(const Contact &contact : contacts_5){
-      cout << "position: " << contact.pos << endl;
-      Vec3f diff = get_difference(contact.pos, coffee);
-      for (int i=0; i < 3; i++)
-      coordinates.data.insert(coordinates.data.end(), diff[i]);
-      }
-    }
-    else{
-      for (int i=0; i < 3; i++)
-      coordinates.data.insert(coordinates.data.end(), 10);
-    }
-
-    Vec3f coor = get_coordinates(cube_1);
-    for (int i=0; i < 3; i++)
-    coordinates.data.insert(coordinates.data.end(), coor[i]);
-    coor = get_coordinates(cube_2);
-    for (int i=0; i < 3; i++)
-    coordinates.data.insert(coordinates.data.end(), coor[i]);
-    coor = get_coordinates(plate);
-    for (int i=0; i < 3; i++)
-    coordinates.data.insert(coordinates.data.end(), coor[i]);
-    coor = get_coordinates(banana);
-    for (int i=0; i < 3; i++)
-    coordinates.data.insert(coordinates.data.end(), coor[i]);
-    coor = get_coordinates(coffee);
-    for (int i=0; i < 3; i++)
-    coordinates.data.insert(coordinates.data.end(), coor[i]);
-
-    cout << '\n';
-    cout << '\n';
-    cout << '\n';
-    msg.data = solution;
-    for (int k=0; k<2; k++ ){
-      std::cout << "Layer" << '\n';
-      for (int i=0; i<5; i++){
-        for (int j=0; j<3; j++){
-          cout << coordinates.data[k*5*3 + i*3 + j] << " ";
-        }
-        cout << '\n';
-      }
-    }
-    publisher_alexa.publish(msg);
-    coordinates_publisher.publish(coordinates);
-
+    Message m = prepare_publish_message(objects);
+    publisher_alexa.publish(m.alexa);
+    coordinates_publisher.publish(m.coordinates);
   }
+
+  Message prepare_publish_message(vector<TransformStampedConstPtr>& objects){
+    Message m;
+    String alexa_message;
+    string solution;
+    TransformStampedConstPtr wand = objects.back();
+    objects.pop_back();
+    vector<vector<Contact>> contacts;
+    for (const TransformStampedConstPtr& object:objects){
+      contacts.push_back(getPointingObject(object, wand));
+    }
+    Float64MultiArray coordinates = initialize_coordinates();
+    for (int i=0; i < NUMBER_OF_OBJECTS; i++){
+      if (!contacts[i].empty()){
+        solution = output_info(contacts[i], i);
+        for(const Contact &contact : contacts[i]){
+          Vec3f diff = get_difference(contact.pos, objects[i]);
+          for (int j=0; j < NUMBER_OF_DIM; j++)
+            coordinates.data.insert(coordinates.data.end(), diff[j]);
+          }
+      }
+      else{
+        for (int j=0; j < NUMBER_OF_DIM; j++)
+          coordinates.data.insert(coordinates.data.end(), 10);
+        }
+      }
+    alexa_message.data = solution;
+    for (const TransformStampedConstPtr object:objects){
+      Vec3f coor = get_coordinates(object);
+      for (int i=0; i < NUMBER_OF_DIM; i++)
+      coordinates.data.insert(coordinates.data.end(), coor[i]);
+    }
+    m.alexa = alexa_message;
+    m.coordinates = coordinates;
+    return m;
+  }
+
+  string output_info(const vector<Contact>& contacts, const int& i){
+    string solution = "The wand is pointing to " + NAME_OF_OBJECTS[i];
+    cout << solution << endl;
+    cout << contacts.size() <<  " contacts found" << endl;
+    for(const Contact &contact : contacts){
+      cout << "position: " << contact.pos << endl;
+      cout << endl;
+    }
+    cout << endl;
+    cout << endl;
+    return solution;
+  }
+
+  Float64MultiArray initialize_coordinates(){
+    Float64MultiArray coordinates;
+    vector<int> dimensions = {NUMBER_OF_LAYERS, NUMBER_OF_OBJECTS, NUMBER_OF_DIM};
+    int size = 1;
+    for (int i=0; i<dimensions.size(); i++){
+      size *= dimensions[i];
+    }
+    for (int i=0; i<dimensions.size(); i++){
+      coordinates.layout.dim.push_back(std_msgs::MultiArrayDimension());
+      coordinates.layout.dim[i].size = dimensions[i];
+      coordinates.layout.dim[i].stride = size;
+      coordinates.layout.dim[i].label = i;
+      size /= dimensions[i];
+    }
+    coordinates.data.clear();
+    return coordinates;
+  }
+
   Vec3f get_coordinates(const TransformStampedConstPtr& object){
     Vec3f coor;
     coor[0] = object->transform.translation.x;
@@ -213,13 +157,13 @@ public:
     coor[0] = object->transform.translation.z;
     return coor;
   }
-  Vec3f get_difference(Vec3f contacts, const TransformStampedConstPtr& object){
+
+  Vec3f get_difference(const Vec3f& contacts, const TransformStampedConstPtr& object){
     Vec3f diff;
     diff[0] = contacts[0] - object->transform.translation.x;
     diff[1] = contacts[1] - object->transform.translation.y;
     diff[0] = contacts[2] - object->transform.translation.z;
     return diff;
-
   }
 
   Transform3f setTranformation(const TransformStampedConstPtr& object){
@@ -266,25 +210,25 @@ public:
 
     return contacts;
   }
-//private:
+
   ros::NodeHandle n;
   ros::Publisher publisher_alexa;
   ros::Publisher coordinates_publisher;
-  message_filters::Subscriber<TransformStamped> *cube_subscriber_1;
-  message_filters::Subscriber<TransformStamped> *cube_subscriber_2;
-  message_filters::Subscriber<TransformStamped> *plate_subscriber;
-  message_filters::Subscriber<TransformStamped> *banana_subscriber;
-  message_filters::Subscriber<TransformStamped> *coffee_subscriber;
-  message_filters::Subscriber<TransformStamped> *table_subscriber;
-  message_filters::Subscriber<TransformStamped> *wand_subscriber;
-  message_filters::Synchronizer<MySyncPolicy>* sync;
+  Subscriber<TransformStamped> *cube_subscriber_1;
+  Subscriber<TransformStamped> *cube_subscriber_2;
+  Subscriber<TransformStamped> *plate_subscriber;
+  Subscriber<TransformStamped> *banana_subscriber;
+  Subscriber<TransformStamped> *coffee_subscriber;
+  Subscriber<TransformStamped> *table_subscriber;
+  Subscriber<TransformStamped> *wand_subscriber;
+  Synchronizer<MySyncPolicy>* sync;
 };
 
 int main(int argc, char **argv){
 
   ros::init(argc, argv, "subscribe_and_publish");
   SubscribeAndPublish SAPObject;
-  ros::Rate r(0.5);
+  ros::Rate r(1);
   while (true){
     ros::spinOnce();
     r.sleep();
