@@ -41,7 +41,7 @@ class SubscribeAndPublish{
 public:
   SubscribeAndPublish(){
     publisher_alexa = n.advertise<std_msgs::String>("/alexa_out", 1);
-    coordinates_publisher = n.advertise<std_msgs::Float64MultiArray> ("/coordinates", 5);
+    coordinates_publisher = n.advertise<std_msgs::Float64MultiArray> ("/coordinates", 1);
     cube_subscriber_1 = new TransformStampedType(n, "vicon/Cube1/Cube1", 5);
     cube_subscriber_2 = new TransformStampedType(n, "vicon/Cube2/Cube2", 5);
     plate_subscriber = new TransformStampedType(n, "vicon/Plate/Plate", 5);
@@ -50,7 +50,7 @@ public:
     table_subscriber = new TransformStampedType(n, "vicon/Table/Table", 5);
     wand_subscriber = new TransformStampedType(n, "vicon/Wand/Wand", 5);
 
-    sync = new message_filters::Synchronizer<MySyncPolicy>(MySyncPolicy(5),
+    sync = new message_filters::Synchronizer<MySyncPolicy>(MySyncPolicy(1),
                                                           *cube_subscriber_1,
                                                           *cube_subscriber_2,
                                                           *plate_subscriber,
@@ -84,6 +84,18 @@ public:
   }
 
   Message prepare_publish_message(vector<TransformStampedConstPtr>& objects){
+    /*
+    Prepares messages for publishing by calculating colision points
+    and using them to calculate coordinate difference between colision point
+    and particular object if that colision exists.
+
+    Arguments:
+    object -- vector of coordinates of objects published by vicon
+
+    Returns:
+    Message -- Float64MultiArray of coordinates and coordinates difference and
+               String for Alexa.
+    */
     Message m;
     String alexa_message;
     string solution;
@@ -106,6 +118,7 @@ public:
       else{
         for (int j=0; j < NUMBER_OF_DIM; j++)
           coordinates.data.insert(coordinates.data.end(), 10);
+          cout << endl;
         }
       }
     alexa_message.data = solution;
@@ -114,14 +127,35 @@ public:
       for (int i=0; i < NUMBER_OF_DIM; i++)
       coordinates.data.insert(coordinates.data.end(), coor[i]);
     }
-    m.alexa = alexa_message;
+    for (int k=0; k<2; k++ ){
+      std::cout << "Layer" << '\n';
+      for (int i=0; i<5; i++){
+        for (int j=0; j<3; j++){
+          cout << coordinates.data[k*5*3 + i*3 + j] << " ";
+        }
+        cout << '\n';
+
+      }
+    }
+    //m.alexa = alexa_message;
     m.coordinates = coordinates;
     return m;
   }
 
   string output_info(const vector<Contact>& contacts, const int& i){
+    /*
+    Generates string message with information where wand is pointing
+    and outputs this string to ROS_INFO
+
+    Argumetns:
+    contacts -- vector of contact points
+    i-- index of object which is subject of calculation
+
+    Returns:
+    solution -- string message
+    */
     string solution = "The wand is pointing to " + NAME_OF_OBJECTS[i];
-    cout << solution << endl;
+    ROS_INFO("%s", solution.c_str());
     cout << contacts.size() <<  " contacts found" << endl;
     for(const Contact &contact : contacts){
       cout << "position: " << contact.pos << endl;
@@ -133,6 +167,13 @@ public:
   }
 
   Float64MultiArray initialize_coordinates(){
+    /*
+    Initializes Float64MultiArray which will hold coordinates and coordinates
+    difference.
+
+    Returns:
+    coordinates -- Float64MultiArray
+    */
     Float64MultiArray coordinates;
     vector<int> dimensions = {NUMBER_OF_LAYERS, NUMBER_OF_OBJECTS, NUMBER_OF_DIM};
     int size = 1;
@@ -151,6 +192,15 @@ public:
   }
 
   Vec3f get_coordinates(const TransformStampedConstPtr& object){
+    /*
+    Initializes Vec3f with coordinate of object.
+
+    Arguments:
+    object -- object of interest.
+
+    Returns:
+    coor -- Vec3f
+    */
     Vec3f coor;
     coor[0] = object->transform.translation.x;
     coor[1] = object->transform.translation.y;
@@ -159,6 +209,16 @@ public:
   }
 
   Vec3f get_difference(const Vec3f& contacts, const TransformStampedConstPtr& object){
+    /*
+    Initializes Vec3f with difference of coordinate of object and contacts.
+
+    Arguments:
+    object -- object of interest.
+    contacts -- contacts points for that object
+
+    Returns:
+    diff -- Vec3f of difference
+    */
     Vec3f diff;
     diff[0] = contacts[0] - object->transform.translation.x;
     diff[1] = contacts[1] - object->transform.translation.y;
@@ -167,6 +227,15 @@ public:
   }
 
   Transform3f setTranformation(const TransformStampedConstPtr& object){
+    /*
+    Transforms object to Transform3f type.
+
+    Arguments:
+    object -- object of interest
+
+    Returns:
+    tf -- transformation
+    */
     Transform3f tf;
     tf.setIdentity();
     tf.setTranslation(Vec3f(object->transform.translation.x,
@@ -181,6 +250,18 @@ public:
 
   vector<Contact> getPointingObject(const TransformStampedConstPtr& object,
                                     const TransformStampedConstPtr& wand){
+    /*
+    Calculates the contact points of object and wand. First, models object as
+    Sphere and wand as cylinder and makes collision objects from that.
+    Collides them using colide from FCL library.
+
+    Arguments:
+    object -- coordinates and orientation of object of interest
+    wand -- coordinates and orientation of pointing equipement
+    
+    Returns:
+    contacts -- vector of contact points
+    */
     shared_ptr<Sphere> object_sphere(new Sphere(0.1));
     shared_ptr<Cylinder> wand_cylinder(new Cylinder(0.1, 10));
 
@@ -228,7 +309,7 @@ int main(int argc, char **argv){
 
   ros::init(argc, argv, "subscribe_and_publish");
   SubscribeAndPublish SAPObject;
-  ros::Rate r(1);
+  ros::Rate r(0.2);
   while (true){
     ros::spinOnce();
     r.sleep();
