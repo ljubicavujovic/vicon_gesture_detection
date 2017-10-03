@@ -2,9 +2,11 @@ import numpy as np
 from scipy.stats import multivariate_normal
 from speech import Speech
 
-
 class BayesFilter:
-
+    """
+    Bayes Filter is used for updating belief state with new observations from
+    speech and gesture.
+    """
     def __init__(self, transition_model, observation_model=None, states=None):
         self.transition_model = transition_model
         self.observation_model = observation_model
@@ -27,16 +29,16 @@ class BayesFilter:
     def gesture_observation(self, coordinate_difference, sigma=np.array([1, 1, 1])):
         mu = np.array([0.0, 0.0, 0.0])
         covariance = np.diag(sigma ** 2)
+
         observation = np.zeros((self.states_number, 1))
+        observation = multivariate_normal.pdf(coordinate_difference, mu, covariance)
+        observation = observation.reshape((self.states_number, 1)).T
 
-        if 1:
-            observation = multivariate_normal.pdf(coordinate_difference, mu, covariance)
-            observation = observation.reshape((self.states_number, 1)).T
-
-        else:
-            observation.fill(1/1000)
         return observation.T
 
     def speech_observation(self, coordinates, sentance):
         self.speech.coordinates = coordinates
         return self.speech.observation_distribution(sentance)
+
+    def reset(self):
+        self.belief.fill(1./self.states_number)
